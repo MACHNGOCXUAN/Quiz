@@ -113,8 +113,22 @@ const quizAnswersItem = document.querySelectorAll(".quiz_answer_item");
 let quizQuestions = document.querySelectorAll(".quiz_numbers ul li");
 
 let currentIndex = null;
+let isSubmit = false;
+let listResults = [];
 let listSubmit = [];
+
+function randomArray(array) {
+  return (array = array.sort(() => Math.random() - Math.random()));
+}
 const quiz = {
+  randomQuestion: function () {
+    questions = randomArray(questions);
+    questions.forEach((q) => {
+      q.answers = randomArray(q.answers);
+    });
+    console.log(questions);
+  },
+
   renderCurrentQuestion: function () {
     quizCount.innerText = `Question ${currentIndex + 1} of ${questions.length}`;
     quizTitle.innerHTML = questions[currentIndex].question;
@@ -137,37 +151,41 @@ const quiz = {
   },
 
   renderTimer: function () {
-    // Lấy thời gian hiện tại
-    var now = new Date().getTime();
+    var timer = 15 * 60;
+    let _this = this;
+    // Lấy thẻ p có id là "timer"
+    var countdownElement = document.getElementById("timer");
 
-    // Đặt thời gian kết thúc là 15 phút sau thời điểm hiện tại
-    var endTime = new Date(now + 15 * 60 * 1000).getTime();
+    // Hàm cập nhật thời gian
+    function updateTimer() {
+      var minutes = Math.floor(timer / 60);
+      var seconds = timer % 60;
 
-    // Cập nhật đồng hồ đếm ngược mỗi giây
-    var x = setInterval(function () {
-      // Lấy thời gian hiện tại
-      var now = new Date().getTime();
+      // Định dạng thời gian thành chuỗi HH:MM:SS
+      var timerString =
+        (minutes < 10 ? "0" : "") +
+        minutes +
+        ":" +
+        (seconds < 10 ? "0" : "") +
+        seconds;
 
-      // Tính thời gian còn lại
-      var distance = endTime - now;
+      // Gán thời gian đã định dạng vào thẻ p
+      countdownElement.innerHTML = timerString;
 
-      // Tính toán thời gian dưới dạng giờ, phút, giây
-      var hours = Math.floor(
-        (distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)
-      );
-      var minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
-      var seconds = Math.floor((distance % (1000 * 60)) / 1000);
-
-      // Hiển thị thời gian còn lại trên trang web
-      document.getElementById("timer").innerHTML =
-        hours + ":" + minutes + ":" + seconds;
-
-      // Khi thời gian kết thúc, hiển thị thông báo
-      if (distance < 0) {
-        clearInterval(x);
-        document.getElementById("timer").innerHTML = "EXPIRED";
+      // Giảm thời gian mỗi giây
+      timer--;
+      // Kiểm tra nếu hết thời gian
+      if (timer < 0) {
+        countdownElement.innerHTML = "Hết thời gian!";
+        _this.handleCheckResults();
       }
-    }, 1000); // Mỗi giây cập nhật một lần
+      if (isSubmit) {
+        clearInterval(intervalId);
+      }
+    }
+
+    // Gọi hàm updateTimer mỗi giây
+    var intervalId = setInterval(updateTimer, 1000);
   },
   handleQuestionList: function () {
     quizQuestions.forEach((item, index) => {
@@ -185,6 +203,9 @@ const quiz = {
         });
         const selected = listSubmit[currentIndex];
         selected >= 0 && quizAnswers[selected].click();
+        if (isSubmit) {
+          quiz.renderResults();
+        }
       });
     });
     quizQuestions[0].click();
@@ -192,13 +213,17 @@ const quiz = {
   handleAnswer: function () {
     quizAnswers.forEach((answer, index) => {
       answer.addEventListener("click", function () {
-        quizAnswers.forEach((item) => {
-          item.classList.remove("active");
-        });
-        answer.classList.add("active");
-        quizQuestions[currentIndex].classList.add("selected");
-        listSubmit[currentIndex] = index;
-        quiz.handleProgress();
+        if (!isSubmit) {
+          quizAnswers.forEach((item) => {
+            item.classList.remove("active");
+          });
+          answer.classList.add("active");
+          quizQuestions[currentIndex].classList.add("selected");
+          listSubmit[currentIndex] = index;
+          quiz.handleProgress();
+        } else {
+          return;
+        }
       });
     });
   },
@@ -223,29 +248,58 @@ const quiz = {
   },
 
   handleSubmit: function () {
+    let count = 0;
     quizSubmit.addEventListener("click", function () {
       const progressLenght = listSubmit.filter((item) => item >= 0);
-      console.log(progressLenght);
       if (progressLenght.length == questions.length) {
-        results.forEach((item, index) => {
-          if (questions[index].answers[listSubmit[index]] === item.answer) {
-            return;
+        questions.forEach((item, index) => {
+          const result = results.find((r) => r.quiz_id === item.quiz_id);
+          if (item.answers[listSubmit[index]] === result.answer) {
+            listResults[index] = listSubmit[index];
+            count++;
           } else {
             quizQuestions[index].classList.add("false");
+            listResults[index] = item.answers.indexOf(result.answer);
           }
         });
       } else {
         alert("Bạn chưa chọn hết các cậu trả lời");
       }
+      isSubmit = true;
+      quiz.handleProgress(count);
     });
   },
-  handleProgress: function () {
-    const progressLenght = listSubmit.filter((item) => item >= 0);
+  renderResults: function () {
+    if (listResults[currentIndex] === listSubmit[currentIndex]) {
+      quizAnswers.forEach((item) => {
+        item.classList.remove("false");
+      });
+      quizAnswers[listResults[currentIndex]].classList.add("active");
+    } else {
+      quizAnswers.forEach((item) => {
+        item.classList.remove("active");
+        item.classList.remove("false");
+      });
+      quizAnswers[listResults[currentIndex]].classList.add("active");
+      quizAnswers[listSubmit[currentIndex]].classList.add("false");
+    }
+  },
+  handleProgress: function (count) {
     const r = quizProgress.getAttribute("r");
-    quizProgress.style = `stroke-dasharray: ${
-      (2 * Math.PI * r * progressLenght.length) / questions.length
-    } 99999`;
-    quizProgressText.innerText = `${progressLenght.length}/${questions.length}`;
+
+    if (!isSubmit) {
+      const progressLenght = listSubmit.filter((item) => item >= 0);
+      quizProgress.style = `stroke-dasharray: ${
+        (2 * Math.PI * r * progressLenght.length) / questions.length
+      } 99999`;
+      quizProgressText.innerText = `${progressLenght.length}/${questions.length}`;
+    } else {
+      const progressLenght = listSubmit.filter((item) => item >= 0);
+      quizProgress.style = `stroke-dasharray: ${
+        (2 * Math.PI * r * count) / questions.length
+      } 99999`;
+      quizProgressText.innerText = `${count}/${questions.length}`;
+    }
   },
 
   render: function () {
@@ -263,6 +317,7 @@ const quiz = {
   },
 
   start: function () {
+    this.randomQuestion();
     this.render();
     this.handle();
   },
